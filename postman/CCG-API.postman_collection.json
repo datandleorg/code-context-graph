@@ -1,0 +1,156 @@
+{
+	"info": {
+		"_postman_id": "ccg-api-collection",
+		"name": "CCG API",
+		"description": "Code Context Graph — ingest, search, and LLM-summarised search.\n\nBase URL: {{base_url}} (default http://localhost:8010)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8010"
+		},
+		{
+			"key": "index_id",
+			"value": "my-backend"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": ["{{base_url}}"],
+					"path": ["health"]
+				},
+				"description": "Health check."
+			}
+		},
+		{
+			"name": "Ingest",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"root_path\": \"/path/to/your/repo\",\n  \"index_id\": \"{{index_id}}\",\n  \"openai_api_key\": \"\",\n  \"embedding_model\": \"text-embedding-3-small\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/ingest",
+					"host": ["{{base_url}}"],
+					"path": ["ingest"]
+				},
+				"description": "Index a codebase. Use index_id to refer to it in search and summarize. Optional: openai_api_key, embedding_model."
+			}
+		},
+		{
+			"name": "Search",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"query\": \"auth login logic\",\n  \"index_id\": \"{{index_id}}\",\n  \"top_k\": 5,\n  \"initial_k\": 50\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/search",
+					"host": ["{{base_url}}"],
+					"path": ["search"]
+				},
+				"description": "Semantic + graph search. Returns raw context string (code snippets). Provide index_id OR index_dir."
+			}
+		},
+		{
+			"name": "Search (by index_dir)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"query\": \"database connection\",\n  \"index_dir\": \"/path/to/repo/.ccg\",\n  \"top_k\": 5,\n  \"initial_k\": 50\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/search",
+					"host": ["{{base_url}}"],
+					"path": ["search"]
+				},
+				"description": "Search using index directory path instead of index_id."
+			}
+		},
+		{
+			"name": "Search Summarize",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"query\": \"Where is user authentication handled?\",\n  \"index_id\": \"{{index_id}}\",\n  \"top_k\": 5,\n  \"initial_k\": 50,\n  \"model\": \"gpt-4o-mini\",\n  \"max_context_chars\": 12000\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/search/summarize",
+					"host": ["{{base_url}}"],
+					"path": ["search", "summarize"]
+				},
+				"description": "Search then LLM-summarise the context into a short answer. Optional: model, max_context_chars, openai_api_key."
+			}
+		},
+		{
+			"name": "Clear index",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"index_id\": \"{{index_id}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/index/clear",
+					"host": ["{{base_url}}"],
+					"path": ["index", "clear"]
+				},
+				"description": "Clear a single index by index_id (or use index_dir with a path). Deletes the index directory and all contents."
+			}
+		},
+		{
+			"name": "Clear all indexes",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/indexes",
+					"host": ["{{base_url}}"],
+					"path": ["indexes"]
+				},
+				"description": "Clear all named indexes under CCG_INDEX_ROOT. Each subdirectory is removed."
+			}
+		}
+	]
+}
