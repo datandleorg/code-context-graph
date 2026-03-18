@@ -23,12 +23,14 @@ WATCH_IGNORED_DIRS = frozenset({
 
 def _should_ignore_event(src_path: str, root: Path, extensions: Optional[Set[str]] = None) -> bool:
     """True if we should ignore this path (won't trigger ingest)."""
+    ext_set = extensions or DEFAULT_EXTENSIONS
     try:
         p = Path(src_path).resolve()
         if not p.exists():
             return False
         if p.is_file():
-            if p.suffix.lower() not in (extensions or DEFAULT_EXTENSIONS):
+            if p.suffix.lower() not in ext_set:
+                logger.debug("Ignored (extension not watched): %s (watched: %s)", src_path, sorted(ext_set))
                 return True
             try:
                 rel = p.relative_to(root)
@@ -36,8 +38,10 @@ def _should_ignore_event(src_path: str, root: Path, extensions: Optional[Set[str
                 return True
             for part in rel.parts:
                 if part in WATCH_IGNORED_DIRS:
+                    logger.debug("Ignored (dir in watch list): %s", src_path)
                     return True
                 if part.startswith(".") and part not in (".github", ".gitignore", ".env.example"):
+                    logger.debug("Ignored (hidden dir): %s", src_path)
                     return True
             return False
         if p.is_dir():
@@ -72,24 +76,22 @@ def run_watcher(
     pending = [False]
     last_trigger = [0.0]
 
-    def schedule_ingest() -> None:
+    def schedule_ingest(src_path: str = "") -> None:
         with lock:
             pending[0] = True
             last_trigger[0] = time.monotonic()
+        if src_path:
+            logger.info("File change detected: %s (ingest in %.1fs)", src_path, debounce_seconds)
 
     def run_pending_ingest() -> None:
         from ccg.runner import ingest_codebase
-        with lock:
-            if not pending[0]:
-                return
-            pending[0] = False
         logger.info("Running incremental ingest after file change ...")
         try:
             result = ingest_codebase(root_path, config=config, incremental=True)
             if result.get("error"):
                 logger.error("Ingest error: %s", result["error"])
             elif result.get("files_unchanged"):
-                logger.debug("No file changes applied")
+                logger.info("No file changes applied (manifest up to date)")
             else:
                 logger.info("Ingest result: %s", result)
         except Exception as e:
@@ -101,7 +103,7 @@ def run_watcher(
                 return
             if _should_ignore_event(event.src_path, root, extensions):
                 return
-            schedule_ingest()
+            schedule_ingest(event.src_path)
 
         def on_modified(self, event):
             self._check(event)
@@ -114,7 +116,7 @@ def run_watcher(
                 return
             if _should_ignore_event(event.src_path, root, extensions):
                 return
-            schedule_ingest()
+            schedule_ingest(event.src_path)
 
     observer = Observer()
     handler = Handler()
@@ -125,15 +127,21 @@ def run_watcher(
     try:
         while observer.is_alive():
             time.sleep(0.5)
+            do_run = False
             with lock:
                 if pending[0] and (time.monotonic() - last_trigger[0]) >= debounce_seconds:
-                    run_pending_ingest()
+                    pending[0] = False
+                    do_run = True
+            if do_run:
+                run_pending_ingest()
     except KeyboardInterrupt:
         pass
     finally:
         observer.stop()
         observer.join()
         with lock:
-            if pending[0]:
-                run_pending_ingest()
+            do_final = pending[0]
+            pending[0] = False
+        if do_final:
+            run_pending_ingest()
         logger.info("Watcher stopped")
