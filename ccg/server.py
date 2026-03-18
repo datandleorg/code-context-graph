@@ -57,12 +57,15 @@ class SearchRequest(BaseModel):
 
 
 class CodeReference(BaseModel):
-    """File path, symbol name, and line range for a search hit."""
-    path: str
-    name: str
-    class_name: Optional[str] = None
-    line_start: Optional[int] = None
-    line_end: Optional[int] = None
+    """Full node object for a search hit (same shape as graph nodes, without content)."""
+    id: str = Field(..., description="Node id (path::type::name::line)")
+    type: str = Field(..., description="Node type: file, class, function, etc.")
+    path: str = Field(..., description="Relative file path")
+    name: str = Field(..., description="Symbol name")
+    class_name: Optional[str] = Field(None, description="Enclosing class if any")
+    signature: str = Field("", description="Function/class signature snippet")
+    line_start: Optional[int] = Field(None, description="Start line (1-based)")
+    line_end: Optional[int] = Field(None, description="End line (1-based)")
 
 
 class SearchResponse(BaseModel):

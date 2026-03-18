@@ -117,8 +117,8 @@ Search returns a single **context string** (code snippets + labels) for the quer
 
 ### 2.4 Output
 
-- A single string: top-k node contents first, then expanded/graph-search nodes with comments like `// Dependency: ...`, `// [Hop 2] Type: ...`.  
-- This string is what the API returns or what the agent/LLM receives as context.
+- **Context**: A single string — top-k node contents first, then expanded/graph-search nodes with comments like `// Dependency: ...`, `// [Hop 2] Type: ...`. This is what the API returns as `context` (or what the agent/LLM receives).
+- **References**: A list of full node objects for each hit (same shape as graph nodes, without content): `id`, `type`, `path`, `name`, `class_name`, `signature`, `line_start`, `line_end`. The API always returns this array alongside `context`; use `references_only: true` to skip the context string and get only references.
 
 ---
 

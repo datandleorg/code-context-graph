@@ -49,7 +49,7 @@ OPENAI_API_KEY=sk-your-openai-api-key
 CCG has three layers:
 
 1. **Ingest** — Parse code (Tree-sitter AST) → build scope nodes and a **code graph** (CALLS, USES_TYPE, SIBLING) → embed node text with **OpenAI** → store nodes in **SQLite** (shadow index), graph in **JSON**, and vectors in either **on-disk files** (default) or **Qdrant** (optional).
-2. **Search** — Embed query → **vector search** (top `initial_k`) → **rerank** (cross-encoder, top `top_k`) → **graph expansion** (one-hop or multi-hop BFS) → return context string and/or **references** (file, function, line range).
+2. **Search** — Embed query → **vector search** (top `initial_k`) → **rerank** (cross-encoder, top `top_k`) → **graph expansion** (one-hop or multi-hop BFS) → return context string and/or **references** (full node object per hit: id, type, path, name, class_name, signature, line_start, line_end; no content).
 3. **API / Agent** — FastAPI server exposes ingest/search/summarize; CLI `agent` runs an interactive ReAct agent that uses search as a tool.
 
 Data flow:
@@ -269,7 +269,7 @@ python main.py search "auth login logic" --id my-backend --references-only
 # Output: path:line_start-line_end  name (or class_name.name)
 ```
 
-The API and CLI always compute **references** (path, name, class_name, line_start, line_end); with `--references-only` the response returns only that list and no `context` string.
+The API and CLI always compute **references** (full node per hit: id, type, path, name, class_name, signature, line_start, line_end; same shape as graph nodes but without content). With `--references-only` the response returns only that list and no `context` string.
 
 ### 4. ReAct agent (interactive, with code RAG tool)
 
@@ -297,7 +297,7 @@ python main.py serve --port 8010
 | Endpoint            | Method | Description                                                                                                                                                                                                   |
 | ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/ingest`           | POST   | Index a codebase (body: `root_path`, optional `index_id`, `openai_api_key`, `embedding_model`). Uses `OPENAI_API_KEY` from env if not in body.                                                                |
-| `/search`           | POST   | Semantic + graph search. Returns `context` (code snippets) and `references` (path, name, class_name, line_start, line_end). Set `references_only: true` in body to skip content and return only `references`. |
+| `/search`           | POST   | Semantic + graph search. Returns `context` (code snippets) and `references` (full node per hit: id, type, path, name, class_name, signature, line_start, line_end; no content). Set `references_only: true` in body to return only `references`. |
 | `/search/summarize` | POST   | Same as search, then an LLM summarizes the context into a short answer (body: `query`, `index_id` or `index_dir`, optional `model`, `max_context_chars`)                                                      |
 | `/index/clear`      | POST   | Clear a single index (body: `index_id` or `index_dir`) — deletes the index directory and all contents                                                                                                         |
 | `/indexes`          | DELETE | Clear all named indexes under CCG_INDEX_ROOT                                                                                                                                                                  |
@@ -347,7 +347,22 @@ curl -X POST http://localhost:8010/indexes/clear
 
 - `query` (string): The search query.
 - `context` (string): Concatenated code snippets. Empty when `references_only: true`.
-- `references` (array): List of `{ path, name, class_name?, line_start, line_end }` for each hit (file, function/symbol, line range). Use for navigation or tooling without parsing the full context.
+- `references` (array): List of full node objects for each hit (same shape as graph nodes, without content): `id`, `type`, `path`, `name`, `class_name`, `signature`, `line_start`, `line_end`. Use for navigation, tooling, or opening at line.
+
+Example reference object:
+
+```json
+{
+  "id": "abc123",
+  "type": "function",
+  "path": "src/utils/helper.ts",
+  "name": "formatDate",
+  "class_name": null,
+  "signature": "formatDate(d: Date): string",
+  "line_start": 10,
+  "line_end": 15
+}
+```
 
 ---
 
@@ -363,7 +378,7 @@ The search pipeline is **three steps**: vector search → rerank → graph expan
   - `**max_hops=1` (default):** For each of the top-k nodes, add **one-hop** neighbors in the code graph (CALLS, USES_TYPE, SIBLING). These neighbors are the direct callers/callees, types, and siblings. No BFS.  
   - `**max_hops>=2`:** Run **graph search**: BFS from the top-k nodes as seeds, following CALLS/USES_TYPE/SIBLING for up to `max_hops` hops, capped by `max_graph_nodes`. This pulls in more related code (e.g. call chains).
 
-So: **after reranking we do graph expansion (one-hop) or graph search (multi-hop)**. The final result is the union of the top-k reranked nodes plus the nodes added by the graph step. That set is returned as `context` (concatenated snippets) and `references` (path, name, line range for each node).
+So: **after reranking we do graph expansion (one-hop) or graph search (multi-hop)**. The final result is the union of the top-k reranked nodes plus the nodes added by the graph step. That set is returned as `context` (concatenated snippets) and `references` (full node object per node: id, type, path, name, class_name, signature, line_start, line_end; no content).
 
 ---
 
@@ -435,7 +450,7 @@ So: **AST + graph** define *what* is indexed and *how* context is expanded; **se
 | `**main.py`**             | CLI entry: subparsers for `ingest`, `watch`, `search`, `agent`, `serve`. Loads `.env`, maps args to config, calls runner or server.                                                                                                                                                                                                                                         |
 | `**ccg/runner.py**`       | Ingest and search orchestration. `ingest_codebase()`: manifest diff, full vs incremental, parser → graph → shadow index → vector store; `search_codebase()`: loads index, builds VectorStore/Reranker/Graph/ShadowIndex, calls `get_llm_context`, returns context + references. Defines index paths (`_index_root()`, `_default_config()`), clear_index, clear_all_indexes. |
 | `**ccg/vector_store.py**` | **VectorStore**: OpenAI embeddings (`embed`, `embed_single`), and either in-memory + `save_to_dir`/`load_from_dir` (vectors.npy, vector_ids.json, vector_meta.json) or Qdrant (`qdrant_url`). Methods: `upsert`, `search`, `delete_ids`, `clear`.                                                                                                                           |
-| `**ccg/collector.py`**    | **get_llm_context()**: vector search → rerank → graph expansion (one-hop or multi-hop BFS) → builds context string and reference list. **References**: path, name, class_name, line_start, line_end per node. Uses ShadowIndex for content and line numbers, CodeGraph for neighbors.                                                                                       |
+| `**ccg/collector.py`**    | **get_llm_context()**: vector search → rerank → graph expansion (one-hop or multi-hop BFS) → builds context string and reference list. **References**: full node per hit (id, type, path, name, class_name, signature, line_start, line_end; no content). Uses ShadowIndex and CodeGraph. |
 | `**ccg/graph.py`**        | **CodeGraph** (NetworkX): nodes (id, path, name, class_name, content, signature), edges (CALLS, USES_TYPE, SIBLING). `get_neighbors()`, `get_nodes_within_hops()` (BFS), load/save JSON.                                                                                                                                                                                    |
 | `**ccg/shadow_index.py`** | **ShadowIndex** (SQLite): `nodes` table (full node fields + line_start/line_end), `edges` table. `get_node()`, `upsert_nodes()`, `delete_nodes_by_paths()`, `save_edges`/`load_edges`. Used at search time for snippet content and reference metadata.                                                                                                                      |
 | `**ccg/parser.py`**       | **ScopeNode**, file discovery, Tree-sitter parsing (Python, JS/TS, Java, Go, Rust, C/C++). Builds scope tree (file/class/function), ghost text, content hash, CALLS/USES_TYPE from AST.                                                                                                                                                                                     |

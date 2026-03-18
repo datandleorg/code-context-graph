@@ -17,14 +17,18 @@ REFERENCE_KEYS = ("path", "name", "class_name", "line_start", "line_end")
 
 
 def _node_to_reference(node: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a reference dict (path, name, class_name, line_start, line_end) from a node."""
-    return {
+    """Build a reference dict: full node object minus content/ghost_text/content_hash (same shape as graph.json nodes)."""
+    out: Dict[str, Any] = {
+        "id": node.get("id", ""),
+        "type": node.get("type", ""),
         "path": node.get("path", ""),
         "name": node.get("name", ""),
         "class_name": node.get("class_name"),
-        "line_start": node.get("start_line") or node.get("line_start"),
-        "line_end": node.get("end_line") or node.get("line_end"),
+        "signature": node.get("signature", ""),
+        "line_start": node.get("start_line") if node.get("start_line") is not None else node.get("line_start"),
+        "line_end": node.get("end_line") if node.get("end_line") is not None else node.get("line_end"),
     }
+    return out
 
 
 def _edge_label(edge_type: str) -> str:

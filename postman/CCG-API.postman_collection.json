@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ccg-api-collection",
 		"name": "CCG API",
-		"description": "Code Context Graph — ingest, search (with optional references-only), and LLM-summarised search.\n\nVariables: base_url (default http://localhost:8010), index_id (e.g. my-backend).\n\nSearch response: query, context (code snippets), references (path, name, class_name, line_start, line_end). Set references_only: true to return only references.",
+		"description": "Code Context Graph — ingest, search (with optional references-only), and LLM-summarised search.\n\nVariables: base_url (default http://localhost:8010), index_id (e.g. my-backend).\n\nSearch response: query, context (code snippets), references (full node per hit: id, type, path, name, class_name, signature, line_start, line_end; no content). Set references_only: true to return only references.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -70,7 +70,7 @@
 					"host": ["{{base_url}}"],
 					"path": ["search"]
 				},
-				"description": "Semantic + graph search. Returns context (code snippets) and references (path, name, class_name, line_start, line_end).\n\nBody: query (required), index_id OR index_dir, top_k, initial_k, max_hops, max_graph_nodes, references_only (false = return context + references; true = return only references, context empty)."
+				"description": "Semantic + graph search. Returns context (code snippets) and references (full node per hit: id, type, path, name, class_name, signature, line_start, line_end; no content).\n\nBody: query (required), index_id OR index_dir, top_k, initial_k, max_hops, max_graph_nodes, references_only (false = return context + references; true = return only references, context empty)."
 			}
 		},
 		{
@@ -92,7 +92,7 @@
 					"host": ["{{base_url}}"],
 					"path": ["search"]
 				},
-				"description": "Same as Search but with references_only: true. Response has context empty and references array with { path, name, class_name, line_start, line_end } for each hit. Use for navigation or tooling without code content."
+				"description": "Same as Search but with references_only: true. Response has context empty and references array with full node per hit (id, type, path, name, class_name, signature, line_start, line_end; no content). Use for navigation or tooling without code content."
 			}
 		},
 		{
