@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+
     import argparse
     logging.basicConfig(
         level=logging.INFO,
@@ -32,7 +35,7 @@ if __name__ == "__main__":
     ingest_p.add_argument("--id", dest="index_id", metavar="ID", help="Named index ID (saved under CCG_INDEX_ROOT/ID; use for agent)")
     ingest_p.add_argument("--index-dir", help="Override index directory (default: <root>/.ccg or CCG_INDEX_ROOT/ID if --id)")
     ingest_p.add_argument("--openai-api-key", help="OpenAI API key for embeddings (or set OPENAI_API_KEY)")
-    ingest_p.add_argument("--embedding-model", help="Embedding model (e.g. text-embedding-3-small, or sentence-transformers/all-MiniLM-L6-v2)")
+    ingest_p.add_argument("--embedding-model", help="OpenAI embedding model (e.g. text-embedding-3-small)")
     ingest_p.add_argument("--full", action="store_true", help="Force full ingest (disable incremental / manifest)")
     watch_p = sub.add_parser("watch", help="Watch repo and run incremental ingest on file changes")
     watch_p.add_argument("root_path", help="Root path to watch")
@@ -51,6 +54,7 @@ if __name__ == "__main__":
     search_p.add_argument("--initial-k", type=int, default=50, help="Vector search candidates")
     search_p.add_argument("--max-hops", type=int, default=1, help="Graph search hops from seeds (1=one-hop; 2+=BFS)")
     search_p.add_argument("--max-graph-nodes", type=int, default=50, help="Max nodes from graph search when max-hops>=2")
+    search_p.add_argument("--references-only", action="store_true", help="Return only file, function, and line refs (no code content)")
     agent_p = sub.add_parser("agent", help="ReAct agent with code RAG tool (interactive)")
     agent_p.add_argument("--id", dest="index_id", metavar="ID", required=True, help="Named index ID to RAG over (from ingest --id)")
     agent_p.add_argument("--model", default="gpt-4o-mini", help="OpenAI chat model (default: gpt-4o-mini)")
@@ -99,6 +103,7 @@ if __name__ == "__main__":
             config["openai_api_key"] = args.openai_api_key
         if getattr(args, "embedding_model", None):
             config["embedding_model"] = args.embedding_model
+        config["references_only"] = getattr(args, "references_only", False)
         result = search_codebase(
             args.query,
             top_k=getattr(args, "top_k", 5),
@@ -109,6 +114,19 @@ if __name__ == "__main__":
         )
         if "error" in result:
             print(result["error"])
+        elif config.get("references_only"):
+            refs = result.get("references", [])
+            for r in refs:
+                path = r.get("path", "")
+                name = r.get("name", "")
+                cls = r.get("class_name")
+                display = f"{cls}.{name}" if cls else name
+                start = r.get("line_start")
+                end = r.get("line_end")
+                if start is not None and end is not None:
+                    print(f"{path}:{start}-{end}  {display}")
+                else:
+                    print(f"{path}  {display}")
         else:
             print(result.get("context", result))
     elif args.command == "agent":

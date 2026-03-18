@@ -160,7 +160,7 @@ def _run_full_ingest(
         embedding_model=embedding_model,
         qdrant_url=qdrant_url,
         openai_api_key=openai_api_key,
-        embedding_provider=embedding_provider or ("openai" if openai_api_key else None),
+        embedding_provider="openai",
     )
     vector_store.upsert([n.id for n in nodes], [n.ghost_text for n in nodes])
     if not qdrant_url:
@@ -209,10 +209,7 @@ def ingest_codebase(
     qdrant_url = cfg.get("qdrant_url")
     openai_api_key = cfg.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
     embedding_provider = cfg.get("embedding_provider")
-    if openai_api_key and embedding_provider != "sentence-transformers":
-        embedding_model = cfg.get("embedding_model") or "text-embedding-3-small"
-    else:
-        embedding_model = cfg.get("embedding_model") or "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model = cfg.get("embedding_model") or "text-embedding-3-small"
 
     index_dir.mkdir(parents=True, exist_ok=True)
 
@@ -252,7 +249,7 @@ def ingest_codebase(
             embedding_model=embedding_model,
             qdrant_url=qdrant_url,
             openai_api_key=openai_api_key,
-            embedding_provider=embedding_provider or ("openai" if openai_api_key else None),
+            embedding_provider="openai",
         )
         if not qdrant_url and (Path(vectors_dir) / "vectors.npy").exists():
             vector_store.load_from_dir(vectors_dir)
@@ -322,7 +319,7 @@ def ingest_codebase(
         embedding_model=embedding_model,
         qdrant_url=qdrant_url,
         openai_api_key=openai_api_key,
-        embedding_provider=embedding_provider or ("openai" if openai_api_key else None),
+        embedding_provider="openai",
         index_id=index_id,
     )
 
@@ -361,7 +358,7 @@ def search_codebase(
         meta = json.loads(vector_meta_path.read_text(encoding="utf-8"))
         embedding_model = cfg.get("embedding_model") or meta.get("model") or "text-embedding-3-small"
     else:
-        embedding_model = cfg.get("embedding_model") or ("text-embedding-3-small" if openai_api_key else "sentence-transformers/all-MiniLM-L6-v2")
+        embedding_model = cfg.get("embedding_model") or "text-embedding-3-small"
     reranker_model = cfg.get("reranker_model") or "BAAI/bge-reranker-base"
 
     if not Path(sqlite_path).exists():
@@ -374,7 +371,7 @@ def search_codebase(
         embedding_model=embedding_model,
         qdrant_url=qdrant_url,
         openai_api_key=openai_api_key,
-        embedding_provider=embedding_provider or ("openai" if openai_api_key else None),
+        embedding_provider="openai",
     )
     if not qdrant_url and (Path(vectors_dir) / "vectors.npy").exists():
         vector_store.load_from_dir(vectors_dir)
@@ -384,7 +381,7 @@ def search_codebase(
     hops = cfg.get("max_hops", max_hops)
     graph_nodes = cfg.get("max_graph_nodes", max_graph_nodes)
 
-    context = get_llm_context(
+    context, references = get_llm_context(
         query,
         vector_store=vector_store,
         reranker=reranker,
@@ -397,4 +394,7 @@ def search_codebase(
     )
     shadow_index.close()
 
-    return {"context": context, "query": query}
+    references_only = cfg.get("references_only", False)
+    if references_only:
+        return {"query": query, "references": references, "context": ""}
+    return {"context": context, "query": query, "references": references}

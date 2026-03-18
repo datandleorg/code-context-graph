@@ -2,6 +2,9 @@
 FastAPI server: ingest, search, and LLM-summarised search endpoints.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 import os
 from pathlib import Path
@@ -50,11 +53,22 @@ class SearchRequest(BaseModel):
     max_hops: int = Field(1, ge=1, le=5, description="Graph search hops from seeds (1=one-hop expansion; 2+=BFS graph search)")
     max_graph_nodes: int = Field(50, ge=1, le=200, description="Max nodes to add from graph search (when max_hops>=2)")
     openai_api_key: Optional[str] = Field(None, description="For query embedding (or set OPENAI_API_KEY)")
+    references_only: bool = Field(False, description="If true, return only file/function/line references (no code content)")
+
+
+class CodeReference(BaseModel):
+    """File path, symbol name, and line range for a search hit."""
+    path: str
+    name: str
+    class_name: Optional[str] = None
+    line_start: Optional[int] = None
+    line_end: Optional[int] = None
 
 
 class SearchResponse(BaseModel):
     query: str
-    context: str
+    context: str = Field("", description="Raw code context (empty when references_only=true)")
+    references: List[CodeReference] = Field(default_factory=list, description="File, function, and line range for each hit")
     error: Optional[str] = None
 
 
@@ -138,6 +152,7 @@ def api_search(body: SearchRequest) -> SearchResponse:
 
     config["max_hops"] = body.max_hops
     config["max_graph_nodes"] = body.max_graph_nodes
+    config["references_only"] = body.references_only
     result = search_codebase(
         body.query,
         top_k=body.top_k,
@@ -146,7 +161,12 @@ def api_search(body: SearchRequest) -> SearchResponse:
     )
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
-    return SearchResponse(query=result["query"], context=result.get("context", ""))
+    refs = [CodeReference(**r) for r in result.get("references", [])]
+    return SearchResponse(
+        query=result["query"],
+        context=result.get("context", ""),
+        references=refs,
+    )
 
 
 @app.post("/search/summarize", response_model=SearchSummarizeResponse)

@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ccg-api-collection",
 		"name": "CCG API",
-		"description": "Code Context Graph — ingest, search, and LLM-summarised search.\n\nBase URL: {{base_url}} (default http://localhost:8010)",
+		"description": "Code Context Graph — ingest, search (with optional references-only), and LLM-summarised search.\n\nVariables: base_url (default http://localhost:8010), index_id (e.g. my-backend).\n\nSearch response: query, context (code snippets), references (path, name, class_name, line_start, line_end). Set references_only: true to return only references.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -63,14 +63,36 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"query\": \"auth login logic\",\n  \"index_id\": \"{{index_id}}\",\n  \"top_k\": 5,\n  \"initial_k\": 50\n}"
+					"raw": "{\n  \"query\": \"auth login logic\",\n  \"index_id\": \"{{index_id}}\",\n  \"top_k\": 5,\n  \"initial_k\": 50,\n  \"max_hops\": 1,\n  \"max_graph_nodes\": 50,\n  \"references_only\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/search",
 					"host": ["{{base_url}}"],
 					"path": ["search"]
 				},
-				"description": "Semantic + graph search. Returns raw context string (code snippets). Provide index_id OR index_dir."
+				"description": "Semantic + graph search. Returns context (code snippets) and references (path, name, class_name, line_start, line_end).\n\nBody: query (required), index_id OR index_dir, top_k, initial_k, max_hops, max_graph_nodes, references_only (false = return context + references; true = return only references, context empty)."
+			}
+		},
+		{
+			"name": "Search (references only)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"query\": \"auth login logic\",\n  \"index_id\": \"{{index_id}}\",\n  \"top_k\": 5,\n  \"initial_k\": 50,\n  \"references_only\": true\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/search",
+					"host": ["{{base_url}}"],
+					"path": ["search"]
+				},
+				"description": "Same as Search but with references_only: true. Response has context empty and references array with { path, name, class_name, line_start, line_end } for each hit. Use for navigation or tooling without code content."
 			}
 		},
 		{
@@ -85,14 +107,14 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"query\": \"database connection\",\n  \"index_dir\": \"/path/to/repo/.ccg\",\n  \"top_k\": 5,\n  \"initial_k\": 50\n}"
+					"raw": "{\n  \"query\": \"database connection\",\n  \"index_dir\": \"/path/to/repo/.ccg\",\n  \"top_k\": 5,\n  \"initial_k\": 50,\n  \"references_only\": false\n}"
 				},
 				"url": {
 					"raw": "{{base_url}}/search",
 					"host": ["{{base_url}}"],
 					"path": ["search"]
 				},
-				"description": "Search using index directory path instead of index_id."
+				"description": "Search using index directory path instead of index_id. Response includes context and references."
 			}
 		},
 		{
@@ -149,7 +171,20 @@
 					"host": ["{{base_url}}"],
 					"path": ["indexes"]
 				},
-				"description": "Clear all named indexes under CCG_INDEX_ROOT. Each subdirectory is removed."
+				"description": "Clear all named indexes under CCG_INDEX_ROOT. Each subdirectory is removed. If DELETE is not supported (e.g. proxy), use 'Clear all indexes (POST)' instead."
+			}
+		},
+		{
+			"name": "Clear all indexes (POST)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/indexes/clear",
+					"host": ["{{base_url}}"],
+					"path": ["indexes", "clear"]
+				},
+				"description": "Same as DELETE /indexes. Use when DELETE is not available (e.g. behind a proxy)."
 			}
 		}
 	]

@@ -1,5 +1,5 @@
 """
-Vector store: bi-encoder embeddings (OpenAI or sentence-transformers) and Qdrant or in-memory ANN search.
+Vector store: OpenAI embeddings and Qdrant or in-memory ANN search.
 """
 
 import json
@@ -12,10 +12,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Default model when using sentence-transformers
-DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
-# OpenAI embedding model default and dimensions (for when using OpenAI)
+# OpenAI embedding model default and dimensions
 OPENAI_DEFAULT_MODEL = "text-embedding-3-small"
 OPENAI_MODEL_DIMENSIONS: Dict[str, int] = {
     "text-embedding-3-small": 1536,
@@ -32,12 +29,12 @@ OPENAI_EMBED_MAX_CHARS = 24_000
 
 class VectorStore:
     """
-    Embed text with a bi-encoder (OpenAI or sentence-transformers) and run vector search (Qdrant or in-memory).
+    Embed text with OpenAI and run vector search (Qdrant or in-memory).
     """
 
     def __init__(
         self,
-        embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+        embedding_model: str = OPENAI_DEFAULT_MODEL,
         qdrant_url: Optional[str] = None,
         collection_name: str = "ccg",
         openai_api_key: Optional[str] = None,
@@ -53,40 +50,21 @@ class VectorStore:
         self._qdrant_client: Any = None
         self._in_memory_vectors: List[Tuple[str, List[float]]] = []
         self._use_qdrant = bool(qdrant_url)
-        self._use_openai = self._resolve_use_openai()
-
-    def _resolve_use_openai(self) -> bool:
-        if self._embedding_provider == "openai":
-            return True
-        if self._embedding_provider == "sentence-transformers":
-            return False
-        if self._openai_api_key and self._model_name in OPENAI_MODEL_DIMENSIONS:
-            return True
-        if self._openai_api_key and "text-embedding" in self._model_name:
-            return True
-        return False
 
     def _get_model(self) -> Any:
         if self._model is not None:
             return self._model
-        if self._use_openai:
-            if not self._openai_api_key:
-                raise ValueError("OpenAI embeddings require openai_api_key (or OPENAI_API_KEY env)")
-            self._dimensions = OPENAI_MODEL_DIMENSIONS.get(
-                self._model_name,
-                OPENAI_MODEL_DIMENSIONS.get(OPENAI_DEFAULT_MODEL, 1536),
+        if not self._openai_api_key:
+            raise ValueError(
+                "OpenAI API key is required for embeddings. "
+                "Set OPENAI_API_KEY in .env or pass openai_api_key in config."
             )
-            self._model = "openai"
-            logger.info("Using OpenAI embeddings: model=%s, dim=%s", self._model_name, self._dimensions)
-            return self._model
-        try:
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self._model_name)
-            self._dimensions = self._model.get_sentence_embedding_dimension()
-            logger.info("Loaded sentence-transformers model %s (dim=%s)", self._model_name, self._dimensions)
-        except Exception as e:
-            logger.error("Failed to load sentence-transformers: %s", e)
-            raise
+        self._dimensions = OPENAI_MODEL_DIMENSIONS.get(
+            self._model_name,
+            OPENAI_MODEL_DIMENSIONS.get(OPENAI_DEFAULT_MODEL, 1536),
+        )
+        self._model = "openai"
+        logger.info("Using OpenAI embeddings: model=%s, dim=%s", self._model_name, self._dimensions)
         return self._model
 
     @property
@@ -114,11 +92,8 @@ class VectorStore:
     def embed(self, texts: List[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, self.dimensions), dtype=np.float32)
-        if self._use_openai:
-            self._get_model()
-            return self._embed_openai(texts)
-        model = self._get_model()
-        return model.encode(texts, convert_to_numpy=True)
+        self._get_model()
+        return self._embed_openai(texts)
 
     def embed_single(self, text: str) -> List[float]:
         arr = self.embed([text])
@@ -244,7 +219,7 @@ class VectorStore:
             json.dumps({
                 "model": self._model_name,
                 "dimensions": self.dimensions,
-                "embedding_provider": "openai" if self._use_openai else "sentence-transformers",
+                "embedding_provider": "openai",
             }),
             encoding="utf-8",
         )
