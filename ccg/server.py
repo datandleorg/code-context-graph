@@ -127,6 +127,8 @@ def api_ingest(body: IngestRequest) -> IngestResponse:
         config["openai_api_key"] = body.openai_api_key
     if body.embedding_model:
         config["embedding_model"] = body.embedding_model
+    if os.environ.get("QDRANT_URL"):
+        config["qdrant_url"] = os.environ.get("QDRANT_URL")
 
     result = ingest_codebase(body.root_path, config=config)
     if "error" in result:
@@ -152,7 +154,8 @@ def api_search(body: SearchRequest) -> SearchResponse:
         config["index_dir"] = body.index_dir
     if body.openai_api_key:
         config["openai_api_key"] = body.openai_api_key
-
+    if os.environ.get("QDRANT_URL"):
+        config["qdrant_url"] = os.environ.get("QDRANT_URL")
     config["max_hops"] = body.max_hops
     config["max_graph_nodes"] = body.max_graph_nodes
     config["references_only"] = body.references_only
@@ -184,6 +187,8 @@ def api_search_summarize(body: SearchSummarizeRequest) -> SearchSummarizeRespons
         config["index_dir"] = body.index_dir
     if body.openai_api_key:
         config["openai_api_key"] = body.openai_api_key
+    if os.environ.get("QDRANT_URL"):
+        config["qdrant_url"] = os.environ.get("QDRANT_URL")
     config["max_hops"] = body.max_hops
     config["max_graph_nodes"] = body.max_graph_nodes
 

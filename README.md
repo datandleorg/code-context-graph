@@ -36,11 +36,15 @@ OPENAI_API_KEY=sk-your-openai-api-key
 
 # Optional: where named indexes are stored (default: ./ccg-indexes)
 # CCG_INDEX_ROOT=./ccg-indexes
+
+# Optional: use Qdrant for vector storage (if unset, vectors are in-memory + on-disk)
+# QDRANT_URL=http://localhost:6333
 ```
 
 - **CLI** (`main.py ingest|search|agent|watch|serve`) and **FastAPI server** both load `.env` from the project root via `python-dotenv`.
 - You can still pass `--openai-api-key` (CLI) or `openai_api_key` in request bodies to override.
 - **Embedding model:** default is `text-embedding-3-small`; override with `--embedding-model` (CLI) or `embedding_model` in the ingest/search config.
+- **Vector storage:** by default vectors are stored **in-memory** and persisted to `index_dir/vectors/`. To use **Qdrant** instead, set `QDRANT_URL` in `.env` (e.g. `http://localhost:6333`) or pass `qdrant_url` in programmatic config. See [Vector storage](#vector-storage-default-vs-qdrant).
 
 ---
 
@@ -89,9 +93,9 @@ Each index lives in a single directory (either `<repo>/.ccg` or `CCG_INDEX_ROOT/
 - **Persistence** — Vectors live in Qdrant; no need to load full index into memory at search time.
 - **Multiple processes** — Several workers or services can share the same Qdrant collection.
 
-If you don’t set `qdrant_url`, CCG works out of the box with on-disk + in-memory vectors. You do **not** need Qdrant for normal use.
+You can use either **in-memory storage** (with on-disk persistence under `index_dir/vectors/`) or **Qdrant**. If you don’t set `qdrant_url` (or `QDRANT_URL` in `.env`), CCG uses in-memory + on-disk vectors and you do **not** need Qdrant for normal use.
 
-**How to use Qdrant:** Pass `qdrant_url` in the ingest/search **config** (e.g. `http://localhost:6333`). The CLI and the HTTP API request bodies do not currently expose `qdrant_url`; use programmatic calls such as `ingest_codebase(..., config={"qdrant_url": "http://localhost:6333"})` and `search_codebase(..., config={"qdrant_url": "...", "index_id": "..."})`. When `qdrant_url` is set:
+**How to use Qdrant:** Set `QDRANT_URL` in your `.env` (e.g. `QDRANT_URL=http://localhost:6333`). The CLI and the HTTP API both read it for ingest and search. You can also pass `qdrant_url` in programmatic config (e.g. `ingest_codebase(..., config={"qdrant_url": "http://localhost:6333"})`). When `qdrant_url` is set:
 
 - **Ingest:** Vectors are sent to Qdrant (collection name `ccg` by default); `save_to_dir` is a no-op.
 - **Search:** VectorStore connects to Qdrant and runs `query_points`; `load_from_dir` is a no-op.

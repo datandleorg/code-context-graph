@@ -206,7 +206,7 @@ def ingest_codebase(
     graph_path = Path(cfg["graph_path"])
     vectors_dir = Path(cfg["vectors_dir"])
     extensions: Optional[Set[str]] = cfg.get("extensions")
-    qdrant_url = cfg.get("qdrant_url")
+    qdrant_url = cfg.get("qdrant_url") or os.environ.get("QDRANT_URL")
     openai_api_key = cfg.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
     embedding_provider = cfg.get("embedding_provider")
     embedding_model = cfg.get("embedding_model") or "text-embedding-3-small"
@@ -350,7 +350,7 @@ def search_codebase(
     sqlite_path = cfg.get("sqlite_path") or index_dir / "ccg.db"
     graph_path = cfg.get("graph_path") or index_dir / "graph.json"
     vectors_dir = cfg.get("vectors_dir") or index_dir / "vectors"
-    qdrant_url = cfg.get("qdrant_url")
+    qdrant_url = cfg.get("qdrant_url") or os.environ.get("QDRANT_URL")
     openai_api_key = cfg.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
     embedding_provider = cfg.get("embedding_provider")
     vector_meta_path = Path(vectors_dir) / "vector_meta.json"
